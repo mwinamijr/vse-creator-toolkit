@@ -1,0 +1,21 @@
+schema_version = "1.0.0"
+
+id = "vse_creator_toolkit"
+version = "0.1.0"
+name = "VSE Creator Toolkit"
+tagline = "Silence remover and creator tools for the Video Sequencer"
+maintainer = "TechDome"
+type = "add-on"
+
+tags = ["Sequencer"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+# Only needed when the extension writes files; unpacking packed audio to a temp file counts.
+[permissions]
+files = "Read audio files and write temporary files for analysis"
+
+[build]
+paths_exclude_pattern = ["__pycache__/", "*.pyc", "/.git/"]

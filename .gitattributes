@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.zip binary
+*.blend binary
+*.wav binary
