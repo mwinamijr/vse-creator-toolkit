@@ -214,6 +214,113 @@ def test_locked_channel_blocks_cut():
     assert len(compat.strips_top(sed)) == count, "locked channel was modified"
 
 
+# ------------------------------------------------------------------- v0.2: export presets
+def _image(path, w, h):
+    img = bpy.data.images.new(os.path.basename(path), w, h)
+    img.filepath_raw = path
+    img.file_format = 'PNG'
+    img.save()
+    return path
+
+
+def _video_scene():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.context.scene
+    scene.name = "Edit"
+    scene.render.fps, scene.render.fps_base = FPS, 1.0
+    scene.render.resolution_x, scene.render.resolution_y = 1920, 1080
+    sed = scene.sequence_editor_create()
+    path = _image(os.path.join(TMP, "frame169.png"), 1920, 1080)
+    compat.strips_top(sed).new_image("Shot", path, channel=1, frame_start=1)
+    scene.frame_start, scene.frame_end = 1, 250
+    return scene, sed
+
+
+def test_export_preset_current_scene():
+    from vse_creator_toolkit import export
+    scene, sed = _video_scene()
+    st = scene.vsect_export
+    st.preset, st.target, st.footage = 'YT_1080', 'CURRENT', 'KEEP'
+    assert bpy.ops.vsect.export_apply() == {'FINISHED'}
+    r = scene.render
+    assert (r.resolution_x, r.resolution_y, r.resolution_percentage) == (1920, 1080, 100)
+    assert r.image_settings.file_format == 'FFMPEG'
+    f = r.ffmpeg
+    assert (f.format, f.codec, f.audio_codec, f.audio_mixrate) == ('MPEG4', 'H264', 'AAC', 48000)
+    assert f.gopsize == round(FPS / 2) and f.audio_bitrate == 320
+    assert r.filepath.startswith("//renders/") and "youtube_1080p" in r.filepath
+    assert export.aspect_label(1080, 1920) == "9:16"
+
+
+def test_export_variant_fill_keeps_original():
+    scene, sed = _video_scene()
+    st = scene.vsect_export
+    st.preset, st.target, st.footage = 'SHORTS', 'VARIANT', 'FILL'
+    assert bpy.ops.vsect.export_apply() == {'FINISHED'}
+    assert len(bpy.data.scenes) == 2
+    orig = bpy.data.scenes["Edit"]
+    var = [s for s in bpy.data.scenes if s != orig][0]
+    assert "YouTube Shorts" in var.name
+    # original untouched
+    assert (orig.render.resolution_x, orig.render.resolution_y) == (1920, 1080)
+    assert abs(compat.strips_top(orig.sequence_editor)["Shot"].transform.scale_x - 1.0) < 1e-6
+    # variant is vertical and the 16:9 shot fills the height (1920/1080)
+    assert (var.render.resolution_x, var.render.resolution_y) == (1080, 1920)
+    shot = compat.strips_top(var.sequence_editor)["Shot"]
+    assert abs(shot.transform.scale_x - 1920 / 1080) < 1e-4, shot.transform.scale_x
+
+
+def test_export_fit_letterbox():
+    from vse_creator_toolkit import export
+    scene, sed = _video_scene()
+    scene.render.resolution_x, scene.render.resolution_y = 1080, 1920
+    done, skipped = export.refit_strips(scene, 'FIT')
+    assert done == 1 and skipped == 0
+    assert abs(compat.strips_top(sed)["Shot"].transform.scale_x - 1080 / 1920) < 1e-4
+
+
+# ------------------------------------------------------------------- v0.2: chapters
+def _chapter_scene(marks, frames=25 * 120):
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.context.scene
+    scene.render.fps, scene.render.fps_base = FPS, 1.0
+    scene.frame_start, scene.frame_end = 1, frames
+    for name, sec in marks:
+        scene.timeline_markers.new(name, frame=1 + int(sec * FPS))
+    return scene
+
+
+def test_chapters_valid():
+    from vse_creator_toolkit import chapters
+    scene = _chapter_scene([("Hook", 0), ("Modelling", 15), ("Materials", 63.5), ("Render", 95)])
+    chs, problems = chapters.collect(scene)
+    assert problems == [], problems
+    text = chapters.build_text(chs, 120)
+    assert text == "0:00 Hook\n0:15 Modelling\n1:03 Materials\n1:35 Render", text
+    assert bpy.ops.vsect.chapters_copy() == {'FINISHED'}
+    assert bpy.context.window_manager.clipboard == text or bpy.app.background
+    assert bpy.data.texts[chapters.TEXT_NAME].as_string().strip() == text
+
+
+def test_chapters_auto_intro_and_rules():
+    from vse_creator_toolkit import chapters
+    # no marker at 0, a too-short chapter, silence markers and default names ignored/renamed
+    scene = _chapter_scene([("Build", 20), ("F_550", 22), ("S1 ▸", 40), ("◂ S1", 41)])
+    chs, problems = chapters.collect(scene)
+    titles = [t for _, t in chs]
+    assert titles == ["Intro", "Build", "Chapter 2"], titles
+    assert any("at least 10s" in p for p in problems), problems
+    scene2 = _chapter_scene([("Only", 30)])
+    _, p2 = chapters.collect(scene2)
+    assert any("at least 3 chapters" in p for p in p2), p2
+
+
+def test_chapters_hours_format():
+    from vse_creator_toolkit import chapters
+    assert chapters.format_time(3725, with_hours=True) == "1:02:05"
+    assert chapters.format_time(59.9) == "0:59"
+
+
 def main():
     addon.register()
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]

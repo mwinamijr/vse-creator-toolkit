@@ -20,15 +20,35 @@ the video, closing the gaps (jump cuts) in one click.
 - Leaves other channels (music, B-roll) untouched
 - One undo step; refuses to touch locked channels or transition strips
 
+### ✅ Export Presets (v0.2)
+One click sets up the render for **YouTube 1080p / 1440p / 4K, YouTube Shorts, Instagram
+Reels, TikTok, Instagram Feed 4:5, Square** or a **Fast Preview**: resolution, MP4/H.264,
+AAC 48 kHz audio and a named output file.
+
+- **New Variant Scene** (default) copies your edit into a new scene such as
+  *"My Edit - YouTube Shorts"*, so your 16:9 edit is never changed.
+- **Fill / Fit** refits your footage when the aspect ratio changes (Fill crops a 16:9 shot to
+  fill a 9:16 frame).
+- Warns when the edit is longer than a platform's recommended maximum.
+
+### ✅ YouTube Chapters (v0.2)
+Turns timeline markers into chapter text (`0:00 Intro`, `1:23 Modelling`, …), copied to the
+clipboard and to a *YouTube Chapters* text block. It checks YouTube's rules (starts at 0:00,
+at least 3 chapters, each at least 10 s), adds an intro chapter automatically, and ignores
+Silence Remover markers. **Add Chapter Here** drops a named marker at the playhead.
+
 ### 🛣 Roadmap
 | Version | Feature |
 |---|---|
-| 0.2 | Export presets (YouTube, Shorts, Reels, TikTok) + markers → YouTube chapters |
 | 0.3 | Auto-ducking (lower music under the voice) + loudness normalise (−14 LUFS) |
 | 0.4 | Auto captions with offline Whisper, word-by-word animated subtitles, SRT import/export |
 | 0.5 | 9:16 auto-reframe for vertical cut-downs |
 
-## Install
+## Download & install
+
+Every version is on the **[Releases page](https://github.com/mwinamijr/vse-creator-toolkit/releases)**,
+each with two zips. Install an older or newer one at any time to compare versions;
+installing replaces the current version. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 - **Blender 4.2+**: download `vse_creator_toolkit-x.y.z.zip`, drag it into Blender (or
   *Edit → Preferences → Get Extensions → ⌄ → Install from Disk*).
@@ -67,9 +87,13 @@ vse_creator_toolkit/      the add-on package (zip this)
   compat.py               3.6 → 5.x API differences
   audio_analysis.py       decode + loudness envelope + silence detection
   cutting.py              split / delete / ripple engine
-  silence.py              settings, operators, sidebar panel
+  silence.py              Silence Remover (settings, operators, panel)
+  export.py               Export Presets
+  chapters.py             YouTube Chapters
 tests/run_tests.py        headless test suite
-tools/build.py            builds dist/ zips
+tools/build.py            builds the two install zips
+tools/release_all.py      publishes a GitHub Release per tag (used by CI)
+.github/workflows/         release automation
 ```
 
 Run the tests (exit code 0 = all passed):
@@ -78,8 +102,14 @@ Run the tests (exit code 0 = all passed):
 blender -b --factory-startup --python tests/run_tests.py
 ```
 
-Build release zips:
+Build release zips locally into `dist/`:
 
 ```bash
-python tools/build.py "C:/Program Files/Blender Foundation/Blender 4.2/blender.exe"
+python tools/build.py --blender "C:/Program Files/Blender Foundation/Blender 4.2/blender.exe"
 ```
+
+### Releasing a version
+1. Bump `version` in `blender_manifest.toml` and `bl_info`, add a section to `CHANGELOG.md`.
+2. Commit, then tag and push: `git tag v0.3.0 && git push origin main v0.3.0`.
+3. The **Release** GitHub Action builds both zips and publishes the release. It also
+   creates releases for any older tag that doesn't have one yet.

@@ -1,0 +1,29 @@
+name: Release
+
+# Publishes a GitHub Release with both install zips for every v* tag that doesn't
+# have one yet (including older tags), so every version stays downloadable.
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and publish missing releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release_all.py

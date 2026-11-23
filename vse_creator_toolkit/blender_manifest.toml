@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "vse_creator_toolkit"
-version = "0.1.0"
+version = "0.2.0"
 name = "VSE Creator Toolkit"
-tagline = "Silence remover and creator tools for the Video Sequencer"
+tagline = "Silence remover, export presets and YouTube chapters"
 maintainer = "TechDome"
 type = "add-on"
 
@@ -16,6 +16,7 @@ license = ["SPDX:GPL-3.0-or-later"]
 # Only needed when the extension writes files; unpacking packed audio to a temp file counts.
 [permissions]
 files = "Read audio files and write temporary files for analysis"
+clipboard = "Copy YouTube chapters to the clipboard"
 
 [build]
 paths_exclude_pattern = ["__pycache__/", "*.pyc", "/.git/"]
