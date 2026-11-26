@@ -3,6 +3,22 @@
 Every version is downloadable from the
 [Releases page](https://github.com/mwinamijr/vse-creator-toolkit/releases).
 
+## [0.3.0] - 2026-11-26
+
+### Added
+- **Auto Ducking** panel: lowers music automatically while the selected voice strips have
+  speech. Settings for duck amount (dB), fade down, fade up, how long a pause may be before the
+  music comes back (prevents pumping), and voice sensitivity. Ducks all other sound strips or one
+  chosen channel. Writes ordinary volume keyframes you can still edit; running it again doesn't
+  compound, and **Remove Ducking** restores the original volume.
+- **Loudness** panel with a built-in **EBU R128 / ITU-R BS.1770-4 loudness meter** (K-weighting,
+  absolute and relative gating), accurate to within 0.05 LU on the EBU Tech 3341 reference
+  signals.
+  - **Measure Mix** renders the edit's audio and shows integrated LUFS and peak.
+  - **Normalise Mix** sets the master volume to hit a target: YouTube/Spotify −14, Podcast −16,
+    EBU R128 −23, ATSC −24 or custom. *Prevent Clipping* keeps peaks under −1 dBFS.
+  - **Match Selected Clips** evens out the loudness of clips recorded at different levels.
+
 ## [0.2.0] - 2026-11-23
 
 ### Added

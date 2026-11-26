@@ -46,6 +46,45 @@ def strip_locked(sed, strip):
     return bool(getattr(strip, "lock", False)) or channel_locked(sed, strip.channel)
 
 
+def action_fcurves(action):
+    """All F-Curves of an action: legacy ``action.fcurves`` or 4.4+ layered channelbags."""
+    if action is None:
+        return []
+    fcs = getattr(action, "fcurves", None)
+    if fcs is not None:
+        return list(fcs)
+    out = []
+    for layer in getattr(action, "layers", ()):
+        for st in layer.strips:
+            for bag in getattr(st, "channelbags", ()):
+                out.extend(bag.fcurves)
+    return out
+
+
+def find_fcurve(id_data, data_path):
+    ad = getattr(id_data, "animation_data", None)
+    if ad is None or ad.action is None:
+        return None
+    for fc in action_fcurves(ad.action):
+        if fc.data_path == data_path:
+            return fc
+    return None
+
+
+def remove_fcurve(id_data, fc):
+    action = id_data.animation_data.action
+    fcs = getattr(action, "fcurves", None)
+    if fcs is not None:
+        fcs.remove(fc)
+        return
+    for layer in getattr(action, "layers", ()):
+        for st in layer.strips:
+            for bag in getattr(st, "channelbags", ()):
+                if fc in list(bag.fcurves):
+                    bag.fcurves.remove(fc)
+                    return
+
+
 def _find_sequencer_area(context):
     screen = context.window.screen if context.window else None
     if screen is None:

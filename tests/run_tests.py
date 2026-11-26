@@ -321,6 +321,140 @@ def test_chapters_hours_format():
     assert chapters.format_time(59.9) == "0:59"
 
 
+# ------------------------------------------------------------------- v0.3: loudness
+def _sine_wav(path, dbfs, seconds, rate=48000, freq=1000.0, burst_dbfs=None):
+    t = np.arange(int(seconds * rate)) / rate
+    x = 10 ** (dbfs / 20) * np.sin(2 * math.pi * freq * t)
+    if burst_dbfs is not None:                       # short loud click near the middle
+        mid = len(x) // 2
+        x[mid:mid + rate // 100] = 10 ** (burst_dbfs / 20)
+    pcm = (np.stack([x, x], 1) * 32767).astype("<i2")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm.tobytes())
+    return path
+
+
+def _sound_scene(specs):
+    """specs: list of (name, path, channel, select)."""
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.context.scene
+    scene.render.fps, scene.render.fps_base = FPS, 1.0
+    scene.render.ffmpeg.audio_mixrate = 48000
+    sed = scene.sequence_editor_create()
+    end = 1
+    for name, path, ch, sel in specs:
+        s = compat.strips_top(sed).new_sound(name, path, channel=ch, frame_start=1)
+        s.select = sel
+        end = max(end, s.frame_final_end)
+    scene.frame_start, scene.frame_end = 1, end - 1
+    return scene, sed
+
+
+def test_loudness_ebu_reference():
+    from vse_creator_toolkit import loudness
+    for fs, db in ((48000, -23.0), (44100, -33.0)):
+        t = np.arange(fs * 20) / fs
+        x = np.stack([10 ** (db / 20) * np.sin(2 * math.pi * 1000 * t)] * 2, 1).astype(np.float32)
+        lufs, peak = loudness.measure_array(x, fs)
+        assert abs(lufs - db) <= 0.1, (fs, lufs)          # EBU Tech 3341 tolerance
+        assert abs(peak - db) <= 0.05, peak
+
+
+def test_loudness_gating_ignores_silence():
+    from vse_creator_toolkit import loudness
+    fs = 48000
+    tone = 10 ** (-23 / 20) * np.sin(2 * math.pi * 1000 * np.arange(fs * 10) / fs)
+    x = np.concatenate([tone, np.zeros(fs * 10)])
+    lufs, _ = loudness.measure_array(np.stack([x, x], 1).astype(np.float32), fs)
+    assert abs(lufs + 23) <= 0.2, lufs
+
+
+def test_normalize_mix():
+    p = _sine_wav(os.path.join(TMP, "quiet.wav"), -30, 8)
+    scene, sed = _sound_scene([("Quiet", p, 1, True)])
+    scene.vsect_audio.target = '-14'
+    assert bpy.ops.vsect.loudness_normalize() == {'FINISHED'}
+    assert abs(scene.audio_volume - 10 ** (16 / 20)) < 0.1, scene.audio_volume
+    from vse_creator_toolkit import audio_tools
+    lufs, peak = audio_tools.measure_mix(scene)
+    assert abs(lufs + 14) <= 0.3, lufs
+
+
+def test_normalize_peak_safe():
+    from vse_creator_toolkit import audio_tools
+    gain, limited = audio_tools.normalize_gain_db(-30.0, -3.0, -14.0, peak_safe=True)
+    assert limited and abs(gain - 2.0) < 1e-6, gain
+    gain, limited = audio_tools.normalize_gain_db(-30.0, -3.0, -14.0, peak_safe=False)
+    assert not limited and abs(gain - 16.0) < 1e-6
+    p = _sine_wav(os.path.join(TMP, "spiky.wav"), -30, 8, burst_dbfs=-3)
+    scene, sed = _sound_scene([("Spiky", p, 1, True)])
+    bpy.ops.vsect.loudness_normalize()
+    lufs, peak = audio_tools.measure_mix(scene)
+    assert peak <= -0.9, peak
+
+
+def test_match_clips():
+    a = _sine_wav(os.path.join(TMP, "a.wav"), -30, 5)
+    b = _sine_wav(os.path.join(TMP, "b.wav"), -20, 5)
+    scene, sed = _sound_scene([("A", a, 1, True), ("B", b, 2, True)])
+    scene.vsect_audio.clip_target = -16.0
+    assert bpy.ops.vsect.loudness_match() == {'FINISHED'}
+    top = compat.strips_top(sed)
+    assert abs(top["A"].volume - 10 ** (14 / 20)) < 0.05, top["A"].volume
+    assert abs(top["B"].volume - 10 ** (4 / 20)) < 0.02, top["B"].volume
+
+
+# ------------------------------------------------------------------- v0.3: ducking
+def _vol_at(scene, strip, frame):
+    fc = compat.find_fcurve(scene, strip.path_from_id("volume"))
+    return fc.evaluate(frame) if fc else strip.volume
+
+
+def test_ducking():
+    voice = os.path.join(TMP, "duck_voice.wav")
+    write_wav(voice, PATTERN)
+    music = _sine_wav(os.path.join(TMP, "duck_music.wav"), -20, 7.8, freq=440)
+    scene, sed = _sound_scene([("Voice", voice, 1, True), ("Music", music, 2, False)])
+    mus = compat.strips_top(sed)["Music"]
+    mus.volume = 0.8
+    st = scene.vsect_audio
+    st.duck_db, st.attack, st.release, st.hold_gap = 12.0, 0.25, 0.6, 0.8
+    assert bpy.ops.vsect.audio_duck() == {'FINISHED'}
+    low = 0.8 * 10 ** (-12 / 20)
+    f = lambda sec: 1 + sec * FPS
+    assert abs(_vol_at(scene, mus, f(0.5)) - low) < 0.01         # speaking
+    assert abs(_vol_at(scene, mus, f(3.65)) - low) < 0.01        # 0.3 s pause stays ducked
+    assert abs(_vol_at(scene, mus, f(5.5)) - 0.8) < 0.01         # 2 s pause: back up
+    assert abs(_vol_at(scene, mus, f(7.3)) - low) < 0.01         # last sentence
+    assert abs(compat.strips_top(sed)["Voice"].volume - 1.0) < 1e-6   # voice untouched
+
+    # running again must not compound the dip
+    bpy.ops.vsect.audio_duck()
+    assert abs(_vol_at(scene, mus, f(0.5)) - low) < 0.01
+    assert abs(_vol_at(scene, mus, f(5.5)) - 0.8) < 0.01
+
+    assert bpy.ops.vsect.audio_unduck() == {'FINISHED'}
+    assert compat.find_fcurve(scene, mus.path_from_id("volume")) is None
+    assert abs(mus.volume - 0.8) < 1e-6
+
+
+def test_ducking_channel_mode():
+    voice = os.path.join(TMP, "duck_voice2.wav")
+    write_wav(voice, PATTERN)
+    music = _sine_wav(os.path.join(TMP, "duck_music2.wav"), -20, 7.8, freq=440)
+    sfx = _sine_wav(os.path.join(TMP, "sfx.wav"), -20, 7.8, freq=880)
+    scene, sed = _sound_scene([("Voice", voice, 1, True), ("Music", music, 3, False), ("SFX", sfx, 4, False)])
+    st = scene.vsect_audio
+    st.music_source, st.music_channel = 'CHANNEL', 3
+    bpy.ops.vsect.audio_duck()
+    top = compat.strips_top(sed)
+    assert compat.find_fcurve(scene, top["Music"].path_from_id("volume")) is not None
+    assert compat.find_fcurve(scene, top["SFX"].path_from_id("volume")) is None
+
+
 def main():
     addon.register()
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]

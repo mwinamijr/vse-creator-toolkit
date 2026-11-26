@@ -37,10 +37,23 @@ clipboard and to a *YouTube Chapters* text block. It checks YouTube's rules (sta
 at least 3 chapters, each at least 10 s), adds an intro chapter automatically, and ignores
 Silence Remover markers. **Add Chapter Here** drops a named marker at the playhead.
 
+### ✅ Auto Ducking (v0.3)
+Select your voice strip(s) and press **Duck Music Under Voice**: the music dips while you talk
+and comes back up in the pauses, with smooth fades. Short pauses between sentences keep the
+music down, so it doesn't pump. It writes normal volume keyframes you can tweak, and **Remove
+Ducking** restores the original level.
+
+### ✅ Loudness (v0.3)
+A built-in **EBU R128 / BS.1770 loudness meter** (verified against the EBU Tech 3341 test
+signals).
+- **Measure Mix**: integrated LUFS and peak of the whole edit.
+- **Normalise Mix**: hits −14 LUFS (YouTube/Spotify), −16 (podcasts), −23 / −24 (broadcast) or a
+  custom target via the master volume; *Prevent Clipping* keeps peaks under −1 dBFS.
+- **Match Selected Clips**: gives clips recorded at different levels the same loudness.
+
 ### 🛣 Roadmap
 | Version | Feature |
 |---|---|
-| 0.3 | Auto-ducking (lower music under the voice) + loudness normalise (−14 LUFS) |
 | 0.4 | Auto captions with offline Whisper, word-by-word animated subtitles, SRT import/export |
 | 0.5 | 9:16 auto-reframe for vertical cut-downs |
 
@@ -88,6 +101,8 @@ vse_creator_toolkit/      the add-on package (zip this)
   audio_analysis.py       decode + loudness envelope + silence detection
   cutting.py              split / delete / ripple engine
   silence.py              Silence Remover (settings, operators, panel)
+  loudness.py             EBU R128 / BS.1770 loudness meter
+  audio_tools.py          Auto Ducking + Loudness panels
   export.py               Export Presets
   chapters.py             YouTube Chapters
 tests/run_tests.py        headless test suite

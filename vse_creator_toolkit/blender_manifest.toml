@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "vse_creator_toolkit"
-version = "0.2.0"
+version = "0.3.0"
 name = "VSE Creator Toolkit"
-tagline = "Silence remover, export presets and YouTube chapters"
+tagline = "Silence remover, ducking, loudness, export presets, chapters"
 maintainer = "TechDome"
 type = "add-on"
 
