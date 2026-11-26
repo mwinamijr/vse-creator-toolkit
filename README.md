@@ -51,10 +51,21 @@ signals).
   custom target via the master volume; *Prevent Clipping* keeps peaks under −1 dBFS.
 - **Match Selected Clips**: gives clips recorded at different levels the same loudness.
 
+### ✅ Auto Captions (v0.4)
+Offline captions for your videos, made right on the timeline.
+- **Transcribe & Caption**: select your voice strip and press one button. Whisper runs
+  locally on your CPU (no account, no upload). One-time setup: *Preferences → VSE Creator
+  Toolkit → Install Whisper* (~100 MB); the speech model downloads on first use (Base ≈ 145 MB).
+- **Styles**: *Word Highlight* (TikTok-style, the spoken word lights up), *Word Pop* (one big
+  word at a time) or classic *Subtitles*, with font, colours, outline, box, size and position.
+- **Fix mistakes**: *Edit as Text* puts the captions in a text block; correct words and press
+  *Apply Edited Text*. *Rebuild Captions* switches style without transcribing again.
+- **SRT import/export**: upload the .srt to YouTube for searchable captions, or bring in
+  subtitles from anywhere.
+
 ### 🛣 Roadmap
 | Version | Feature |
 |---|---|
-| 0.4 | Auto captions with offline Whisper, word-by-word animated subtitles, SRT import/export |
 | 0.5 | 9:16 auto-reframe for vertical cut-downs |
 
 ## Download & install
@@ -103,6 +114,10 @@ vse_creator_toolkit/      the add-on package (zip this)
   silence.py              Silence Remover (settings, operators, panel)
   loudness.py             EBU R128 / BS.1770 loudness meter
   audio_tools.py          Auto Ducking + Loudness panels
+  captions.py             caption grouping + SRT (pure Python)
+  caption_strips.py       caption text strips: styles, metrics, restyle
+  transcribe.py           optional faster-whisper backend + installer
+  captions_ui.py          Auto Captions panel, operators, preferences
   export.py               Export Presets
   chapters.py             YouTube Chapters
 tests/run_tests.py        headless test suite

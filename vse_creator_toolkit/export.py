@@ -46,6 +46,13 @@ def apply_render_settings(scene, preset_id, output_dir="//renders/"):
     r.resolution_x, r.resolution_y = w, h
     r.resolution_percentage = 100
     r.pixel_aspect_x = r.pixel_aspect_y = 1.0
+    # Video editing needs the 'Standard' view transform: AgX/Filmic (meant for 3D
+    # renders) would grey out whites and shift the colours of your footage.
+    try:
+        scene.view_settings.view_transform = 'Standard'
+        scene.view_settings.look = 'None'
+    except TypeError:
+        pass
 
     ims = r.image_settings
     if hasattr(ims, "media_type"):          # Blender 5.0+ separates image/video output

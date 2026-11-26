@@ -250,6 +250,7 @@ def test_export_preset_current_scene():
     assert f.gopsize == round(FPS / 2) and f.audio_bitrate == 320
     assert r.filepath.startswith("//renders/") and "youtube_1080p" in r.filepath
     assert export.aspect_label(1080, 1920) == "9:16"
+    assert scene.view_settings.view_transform == 'Standard'
 
 
 def test_export_variant_fill_keeps_original():
@@ -453,6 +454,150 @@ def test_ducking_channel_mode():
     top = compat.strips_top(sed)
     assert compat.find_fcurve(scene, top["Music"].path_from_id("volume")) is not None
     assert compat.find_fcurve(scene, top["SFX"].path_from_id("volume")) is None
+
+
+# ------------------------------------------------------------------- v0.4: captions
+WORDS = [  # a fake transcript (seconds)
+    ("Welcome", 0.0, 0.4), ("back", 0.45, 0.7), ("to", 0.72, 0.8), ("the", 0.82, 0.9), ("channel.", 0.92, 1.4),
+    ("Today", 2.2, 2.5), ("we", 2.55, 2.65), ("build", 2.7, 3.0), ("a", 3.02, 3.08), ("low", 3.1, 3.3),
+    ("poly", 3.32, 3.6), ("island", 3.62, 4.0), ("in", 4.05, 4.15), ("Blender!", 4.2, 4.8),
+]
+
+
+def _words():
+    return [{"text": t, "start": a, "end": b} for t, a, b in WORDS]
+
+
+def _caption_scene(w=1920, h=1080):
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.context.scene
+    scene.render.fps, scene.render.fps_base = FPS, 1.0
+    scene.render.resolution_x, scene.render.resolution_y = w, h
+    scene.sequence_editor_create()
+    scene.frame_start, scene.frame_end = 1, 200
+    return scene
+
+
+def test_caption_grouping():
+    from vse_creator_toolkit import captions
+    caps = captions.group_words(_words(), max_chars=32, max_duration=3.0)
+    texts = [c["text"] for c in caps]
+    assert texts[0] == "Welcome back to the channel.", texts       # sentence end breaks
+    assert all(len(t) <= 32 for t in texts), texts
+    assert texts[-1].endswith("Blender!")
+    for a, b in zip(caps, caps[1:]):
+        assert a["end"] <= b["start"] + 1e-9, "captions overlap"
+    narrow = captions.group_words(_words(), max_chars=12)
+    assert all(len(c["text"]) <= 12 or len(c["words"]) == 1 for c in narrow)
+    pops = captions.group_words(_words(), one_word=True)
+    assert len(pops) == len(WORDS)
+
+
+def test_srt_roundtrip_and_parse():
+    from vse_creator_toolkit import captions
+    caps = captions.group_words(_words())
+    text = captions.write_srt(caps)
+    assert text.startswith("1\n00:00:00,000 --> 00:00:01,")
+    back = captions.parse_srt(text)
+    assert [c["text"] for c in back] == [c["text"] for c in caps]
+    assert all(abs(a["start"] - b["start"]) < 0.002 for a, b in zip(back, caps))
+    messy = "﻿1\r\n00:01:02.5 --> 00:01:04,250\r\n<i>Hello</i>\r\nthere\r\n\r\n\r\n2\r\n00:01:05,000 --> 00:01:06,000\r\nBye\r\n"
+    segs = captions.parse_srt(messy)
+    assert segs[0]["text"] == "Hello there" and abs(segs[0]["start"] - 62.5) < 1e-6 and abs(segs[0]["end"] - 64.25) < 1e-6
+    assert len(segs) == 2
+    words = captions.segments_to_words(segs)
+    assert words[0]["start"] == 62.5 and abs(words[1]["end"] - 64.25) < 1e-6
+
+
+def test_caption_strips_lines():
+    from vse_creator_toolkit import caption_strips, captions_ui
+    scene = _caption_scene()
+    st = scene.vsect_captions
+    st.mode = 'LINES'
+    strips, caps = captions_ui.build_from_words(scene, _words(), st)
+    assert len(strips) == len(caps)
+    s0 = strips[0]
+    assert s0.type == 'TEXT' and s0.text == "Welcome back to the channel."
+    assert (s0.frame_final_start, s0.frame_final_end) == (0, round(1.4 * FPS)), \
+        (s0.frame_final_start, s0.frame_final_end)
+    assert s0.font_size == round(1080 * st.size)
+    assert abs(s0.location[1] - st.position_y) < 1e-6 and s0.align_x == 'CENTER'
+    if hasattr(s0, "use_outline"):
+        assert s0.use_outline
+
+
+def test_caption_strips_highlight_positions():
+    from vse_creator_toolkit import caption_strips, captions_ui
+    scene = _caption_scene()
+    st = scene.vsect_captions
+    st.mode = 'HIGHLIGHT'
+    strips, caps = captions_ui.build_from_words(scene, _words(), st)
+    lines = [s for s in strips if s["vsect_caption"] == 'line']
+    words = [s for s in strips if s["vsect_caption"] == 'word']
+    assert len(lines) == len(caps) and len(words) == len(WORDS)
+    assert len({s.channel for s in words}) == 1 and words[0].channel == lines[0].channel + 1
+    assert all(s.font is not None and s.font == lines[0].font for s in strips), "captions need one real font"
+    first_line_words = [w for w in words if w["vsect_cap"] == 0]
+    xs = [w.location[0] for w in first_line_words]
+    assert xs == sorted(xs) and xs[0] < 0.5 < xs[-1] + 0.1, xs
+    # word timing: each word strip ends where the next word starts, inside its line
+    for w in first_line_words:
+        assert lines[0].frame_final_start <= w.frame_final_start < w.frame_final_end <= lines[0].frame_final_end
+    # restyle keeps positions consistent when the size changes
+    st.size = 0.08
+    caption_strips.restyle(scene, st)
+    xs2 = [w.location[0] for w in first_line_words]
+    assert xs2[0] < xs[0], "bigger text should start further left"
+
+
+def test_caption_strips_pop_and_clear():
+    from vse_creator_toolkit import caption_strips, captions_ui
+    scene = _caption_scene(1080, 1920)
+    st = scene.vsect_captions
+    st.mode, st.uppercase = 'POP', True
+    strips, caps = captions_ui.build_from_words(scene, _words(), st)
+    assert len(strips) == len(WORDS) and strips[0].text == "WELCOME"
+    assert captions_ui.effective_max_chars(scene, st) == 18
+    # rebuild replaces instead of duplicating
+    captions_ui.save_transcript(_words())
+    assert bpy.ops.vsect.captions_rebuild() == {'FINISHED'}
+    assert len(caption_strips.caption_strips(scene)) == len(WORDS)
+    assert bpy.ops.vsect.captions_clear() == {'FINISHED'}
+    assert caption_strips.caption_strips(scene) == []
+
+
+def test_srt_import_export_edit_ops():
+    from vse_creator_toolkit import caption_strips, captions
+    scene = _caption_scene()
+    st = scene.vsect_captions
+    st.mode = 'LINES'
+    src = os.path.join(TMP, "in.srt")
+    with open(src, "w", encoding="utf-8") as f:
+        f.write("1\n00:00:01,000 --> 00:00:03,000\nFirst caption here\n\n2\n00:00:04,000 --> 00:00:05,500\nSecond one\n")
+    assert bpy.ops.vsect.captions_import_srt(filepath=src) == {'FINISHED'}
+    caps = caption_strips.read_back(scene)
+    assert [c["text"] for c in caps] == ["First caption here", "Second one"], caps
+    assert abs(caps[0]["start"] - 1.0) < 1 / FPS + 1e-6
+
+    out = os.path.join(TMP, "out.srt")
+    assert bpy.ops.vsect.captions_export_srt(filepath=out) == {'FINISHED'}
+    segs = captions.parse_srt(open(out, encoding="utf-8").read())
+    assert [s["text"] for s in segs] == ["First caption here", "Second one"]
+
+    # edit as text, change a word, apply
+    bpy.ops.vsect.captions_edit_text()
+    tb = bpy.data.texts["Captions.srt"]
+    txt = tb.as_string().replace("Second one", "Second line fixed")
+    tb.clear()
+    tb.write(txt)
+    assert bpy.ops.vsect.captions_apply_text() == {'FINISHED'}
+    assert [c["text"] for c in caption_strips.read_back(scene)][1] == "Second line fixed"
+
+
+def test_whisper_missing_is_graceful():
+    from vse_creator_toolkit import transcribe
+    assert isinstance(transcribe.available(), bool)
+    assert os.path.isdir(transcribe.deps_dir()) and os.path.isdir(transcribe.models_dir())
 
 
 def main():

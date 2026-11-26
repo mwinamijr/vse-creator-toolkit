@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "vse_creator_toolkit"
-version = "0.3.0"
+version = "0.4.0"
 name = "VSE Creator Toolkit"
-tagline = "Silence remover, ducking, loudness, export presets, chapters"
+tagline = "Silence remover, captions, ducking, loudness, export presets"
 maintainer = "TechDome"
 type = "add-on"
 
@@ -17,6 +17,7 @@ license = ["SPDX:GPL-3.0-or-later"]
 [permissions]
 files = "Read audio files and write temporary files for analysis"
 clipboard = "Copy YouTube chapters to the clipboard"
+network = "Download optional Whisper packages and models on request"
 
 [build]
 paths_exclude_pattern = ["__pycache__/", "*.pyc", "/.git/"]

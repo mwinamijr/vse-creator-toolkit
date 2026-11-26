@@ -3,6 +3,30 @@
 Every version is downloadable from the
 [Releases page](https://github.com/mwinamijr/vse-creator-toolkit/releases).
 
+## [0.4.0] - 2026-11-26
+
+### Added
+- **Auto Captions** panel.
+  - **Transcribe & Caption**: offline speech-to-text with Whisper (faster-whisper, CPU int8)
+    for the selected sound strips, with word-level timing. Runs in the background with a
+    progress bar; Esc cancels. Models: Tiny, Base (recommended), Small, plus English-only
+    variants. Language auto-detect or a fixed code.
+  - Three caption styles: **Word Highlight** (TikTok style: the spoken word lights up, placed
+    with exact font metrics), **Word Pop** (one big word at a time with a pop-in) and
+    **Subtitles** (classic lines).
+  - Style controls: size, height, text/highlight colours, font, outline, shadow, background
+    box, UPPERCASE, punctuation removal, characters per line (auto 32 wide / 18 vertical),
+    max duration. **Apply Style** restyles existing captions; **Rebuild Captions** regroups
+    from the saved transcript without re-transcribing.
+  - **Import SRT / Export SRT**, and **Edit as Text / Apply Edited Text** to fix words in a
+    text block.
+- **Install Whisper** button (Preferences): installs faster-whisper into the add-on's own
+  user folder on request (never into Blender itself); models download on first use.
+
+### Changed
+- Export presets now set the view transform to **Standard** (AgX/Filmic greyed out whites and
+  shifted footage colours in edits). The Captions panel warns when it isn't Standard.
+
 ## [0.3.0] - 2026-11-26
 
 ### Added
