@@ -63,10 +63,18 @@ Offline captions for your videos, made right on the timeline.
 - **SRT import/export**: upload the .srt to YouTube for searchable captions, or bring in
   subtitles from anywhere.
 
+### ✅ Auto Reframe 9:16 (v0.5)
+Make the vertical version of a wide edit without losing the action.
+1. *Export Presets → YouTube Shorts → New Variant Scene → Fill* (creates the 9:16 copy).
+2. In that scene, select the video strips → *Auto Reframe*.
+
+It looks at motion, faces/skin and detail in every shot, finds the cuts (to the exact frame)
+and keyframes the crop: **Steady** (one framing per shot) or **Follow** (smooth tracking).
+Fine-tune any shot by editing the strip's Position X keys.
+
 ### 🛣 Roadmap
-| Version | Feature |
-|---|---|
-| 0.5 | 9:16 auto-reframe for vertical cut-downs |
+Ideas for next versions: one-click Shorts from chapters, beat-synced cuts from music, a
+B-roll gap filler, and proxy/render-queue helpers. Suggestions welcome in Issues.
 
 ## Download & install
 
@@ -118,6 +126,8 @@ vse_creator_toolkit/      the add-on package (zip this)
   caption_strips.py       caption text strips: styles, metrics, restyle
   transcribe.py           optional faster-whisper backend + installer
   captions_ui.py          Auto Captions panel, operators, preferences
+  reframe.py              Auto Reframe analysis (interest map, cuts, keyframes)
+  reframe_ui.py           Auto Reframe panel and operators
   export.py               Export Presets
   chapters.py             YouTube Chapters
 tests/run_tests.py        headless test suite

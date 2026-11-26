@@ -600,6 +600,132 @@ def test_whisper_missing_is_graceful():
     assert os.path.isdir(transcribe.deps_dir()) and os.path.isdir(transcribe.models_dir())
 
 
+# ------------------------------------------------------------------ v0.5: auto reframe
+def test_reframe_helpers():
+    from vse_creator_toolkit import reframe
+    prof = np.zeros(100)
+    prof[78:84] = 1.0
+    u = reframe.best_window(prof, 0.3, centre_bias=0.0)
+    assert 0.7 <= u <= 0.85, u                                 # window centred on the bump, inside the frame
+    assert reframe.best_window(np.zeros(100), 0.3) == 0.5       # nothing interesting: centre
+    assert reframe.offset_for(0.5, 3413, 1080) == 0
+    assert reframe.offset_for(1.0, 3413, 1080) == -(3413 - 1080) / 2   # clamped: frame stays filled
+    assert reframe.offset_for(0.0, 3413, 1080) == (3413 - 1080) / 2
+    a, b = np.array([1.0, 0, 0, 0]), np.array([0, 0, 0, 1.0])
+    assert reframe.split_shots([a, a, b, b, a], 0.5) == [0, 2, 4]
+
+
+def _make_two_shot_movie(path, frames=100, cut=50, w=320, h=180):
+    """Shot 1: dark blue, bright box right (x 0.8). Shot 2: dark red, box left (x 0.2). Cut at `cut`."""
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    sc = bpy.context.scene
+    sc.render.fps, sc.render.fps_base = FPS, 1.0
+    sc.render.resolution_x, sc.render.resolution_y, sc.render.resolution_percentage = w, h, 100
+    sc.view_settings.view_transform = 'Standard'
+    sc.render.image_settings.file_format = 'FFMPEG'
+    sc.render.ffmpeg.format, sc.render.ffmpeg.codec = 'MPEG4', 'H264'
+    sc.render.ffmpeg.constant_rate_factor = 'HIGH'
+    sc.render.filepath = path
+    sc.render.use_file_extension = False
+    sed = sc.sequence_editor_create()
+    top = compat.strips_top(sed)
+    for i, (f0, f1, bg, x) in enumerate(((1, cut, (0.05, 0.08, 0.25), 0.8), (cut, frames + 1, (0.3, 0.05, 0.05), 0.2))):
+        b = top.new_effect(f"bg{i}", 'COLOR', channel=1, frame_start=f0, frame_end=f1)
+        b.color = bg
+        box = top.new_effect(f"box{i}", 'COLOR', channel=2, frame_start=f0, frame_end=f1)
+        box.color = (1, 0.85, 0.6)
+        box.transform.scale_x, box.transform.scale_y = 0.12, 0.3
+        box.transform.offset_x = (x - 0.5) * w
+        box.blend_type = 'ALPHA_OVER'
+    sc.frame_start, sc.frame_end = 1, frames
+    bpy.ops.render.render(animation=True)
+    return path
+
+
+def _reframe_scene(movie):
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    sc = bpy.context.scene
+    sc.name = "Edit"
+    sc.render.fps, sc.render.fps_base = FPS, 1.0
+    sc.render.resolution_x, sc.render.resolution_y = 1920, 1080
+    sed = sc.sequence_editor_create()
+    m = compat.strips_top(sed).new_movie("Clip", movie, channel=1, frame_start=1)
+    sc.frame_start, sc.frame_end = 1, m.frame_final_end - 1
+    # vertical variant with Fill (v0.2 export presets)
+    st = sc.vsect_export
+    st.preset, st.target, st.footage = 'SHORTS', 'VARIANT', 'FILL'
+    bpy.ops.vsect.export_apply()
+    var = [s for s in bpy.data.scenes if s.name != "Edit"][0]
+    bpy.context.window.scene = var if bpy.context.window else None
+    return var
+
+
+def test_reframe_steady_cuts():
+    from vse_creator_toolkit import reframe
+    movie = _make_two_shot_movie(os.path.join(TMP, "two_shots.mp4"))
+    var = _reframe_scene(movie)
+    clip = compat.strips_top(var.sequence_editor)["Clip"]
+    clip.select = True
+    dw = reframe.displayed_width(clip)
+    assert dw > var.render.resolution_x * 2, dw                  # filled 16:9 in a 9:16 frame
+    var.vsect_reframe.mode = 'STEADY'
+    with bpy.context.temp_override(scene=var):
+        assert bpy.ops.vsect.reframe('EXEC_DEFAULT') == {'FINISHED'}
+    fc = compat.find_fcurve(var, clip.transform.path_from_id("offset_x"))
+    assert fc is not None
+    keys = sorted((round(k.co[0]), k.co[1]) for k in fc.keyframe_points)
+    assert len(keys) == 2, keys
+    (f1, o1), (f2, o2) = keys
+    assert f2 == 50 or f2 == 51, f"cut frame {f2}"              # exact cut (frame index of shot 2)
+    assert o1 < -500 and o2 > 500, keys                          # subject right → shift left; then left → shift right
+    # the box must be inside the vertical frame in both shots
+    for (f, off), x in ((keys[0], 0.8), (keys[1], 0.2)):
+        box_px = (x - 0.5) * dw + off
+        assert abs(box_px) < var.render.resolution_x / 2, (f, box_px)
+    assert all(k.interpolation == 'CONSTANT' for k in fc.keyframe_points)
+    with bpy.context.temp_override(scene=var):
+        bpy.ops.vsect.reframe_clear()
+    assert compat.find_fcurve(var, clip.transform.path_from_id("offset_x")) is None
+    assert clip.transform.offset_x == 0
+
+
+def test_reframe_follow_mode():
+    movie = os.path.join(TMP, "two_shots.mp4")
+    if not os.path.exists(movie):
+        _make_two_shot_movie(movie)
+    var = _reframe_scene(movie)
+    clip = compat.strips_top(var.sequence_editor)["Clip"]
+    clip.select = True
+    var.vsect_reframe.mode = 'FOLLOW'
+    var.vsect_reframe.samples = 4
+    with bpy.context.temp_override(scene=var):
+        bpy.ops.vsect.reframe('EXEC_DEFAULT')
+    fc = compat.find_fcurve(var, clip.transform.path_from_id("offset_x"))
+    pts = sorted(fc.keyframe_points, key=lambda k: k.co[0])
+    assert len(pts) > 4
+    before = [k.co[1] for k in pts if k.co[0] < 50]
+    after = [k.co[1] for k in pts if k.co[0] >= 51]
+    assert before and after and max(before) < 0 < min(after), (before, after)
+    assert "VSECT_Reframe_Analysis" not in bpy.data.scenes        # temp scene cleaned up
+
+
+def test_reframe_refuses_wide_scene():
+    movie = os.path.join(TMP, "two_shots.mp4")
+    if not os.path.exists(movie):
+        _make_two_shot_movie(movie)
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    sc = bpy.context.scene
+    sc.render.resolution_x, sc.render.resolution_y = 1920, 1080
+    sed = sc.sequence_editor_create()
+    m = compat.strips_top(sed).new_movie("Clip", movie, channel=1, frame_start=1)
+    m.select = True
+    try:
+        r = bpy.ops.vsect.reframe('EXEC_DEFAULT')
+    except RuntimeError:
+        r = {'CANCELLED'}
+    assert r == {'CANCELLED'}
+
+
 def main():
     addon.register()
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]

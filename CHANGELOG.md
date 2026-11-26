@@ -3,6 +3,21 @@
 Every version is downloadable from the
 [Releases page](https://github.com/mwinamijr/vse-creator-toolkit/releases).
 
+## [0.5.0] - 2026-11-27
+
+### Added
+- **Auto Reframe (9:16)** panel: turns a wide edit into a vertical one that keeps the action
+  in frame, instead of a fixed centre crop that cuts people out.
+  - Analyses the uncropped footage of the selected video strips (small sample frames) for
+    motion, skin tones and detail, with an adjustable centre bias.
+  - Finds shot cuts with colour histograms and refines each cut to the exact frame.
+  - **Steady** mode: one fixed framing per shot, switching exactly at the cut (the way editors
+    reframe). **Follow** mode: smooth, lag-free tracking inside each shot.
+  - Writes ordinary *Position X* keyframes you can adjust; **Clear Reframe** removes them.
+  - Runs in the background with a progress bar; Esc cancels.
+- Works with the v0.2 export presets: *YouTube Shorts → New Variant Scene → Fill*, then
+  Auto Reframe in the vertical scene.
+
 ## [0.4.0] - 2026-11-26
 
 ### Added
