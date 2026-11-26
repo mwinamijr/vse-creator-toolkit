@@ -27,6 +27,12 @@ Every version is downloadable from the
 - Export presets now set the view transform to **Standard** (AgX/Filmic greyed out whites and
   shifted footage colours in edits). The Captions panel warns when it isn't Standard.
 
+### Known limitations
+- **Whisper transcription is new and hasn't been tested end to end yet** (the caption styles,
+  SRT import/export and text editing are tested). If *Install Whisper* or *Transcribe &
+  Caption* fails, please open an issue with the error message. Importing an SRT works as a
+  fallback.
+
 ## [0.3.0] - 2026-11-26
 
 ### Added
